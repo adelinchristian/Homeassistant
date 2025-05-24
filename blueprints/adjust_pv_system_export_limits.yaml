@@ -1,15 +1,12 @@
 blueprint:
-  blueprint:
   name: Adjust Solar Feed-in Based on Grid Voltage (with Hysteresis)
   description: >
     Dynamically adjust the solar export limit based on real-time grid voltage using configurable thresholds
     and hysteresis to prevent frequent toggling due to overvoltage. Optionally notifies the user if voltage exceeds the upper limit.
     
     Requires a voltage sensor, a numeric input to represent the export limit, and a mobile app device for notifications.
-
   domain: automation
   source_url: https://github.com/adelinchristian/homeassistant/blob/main/blueprints/adjust_pv_system_export_limits.yaml
-  version: "1.0.0"
   input:
     voltage_sensor:
       name: Grid Voltage Sensor
