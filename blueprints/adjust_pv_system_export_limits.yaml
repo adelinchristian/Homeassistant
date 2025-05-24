@@ -1,0 +1,156 @@
+blueprint:
+  blueprint:
+  name: Adjust Solar Feed-in Based on Grid Voltage (with Hysteresis)
+  description: >
+    Dynamically adjust the solar export limit based on real-time grid voltage using configurable thresholds
+    and hysteresis to prevent frequent toggling due to overvoltage. Optionally notifies the user if voltage exceeds the upper limit.
+    
+    Requires a voltage sensor, a numeric input to represent the export limit, and a mobile app device for notifications.
+
+  domain: automation
+  source_url: https://github.com/adelinchristian/homeassistant/blob/main/blueprints/adjust_solar_feed.yaml
+  version: "1.0.0"
+  input:
+    voltage_sensor:
+      name: Grid Voltage Sensor
+      selector:
+        entity:
+          domain: sensor
+    export_limit_input:
+      name: Export Limit Input Number
+      selector:
+        entity:
+          domain: input_number
+    notify_target:
+      name: Notify Device
+      selector:
+        device:
+          integration: mobile_app
+    limit_1:
+      name: Export Limit 1 (Max)
+      default: 5800
+    limit_2:
+      name: Export Limit 2
+      default: 4500
+    limit_3:
+      name: Export Limit 3
+      default: 3000
+    limit_4:
+      name: Export Limit 4
+      default: 1500
+    limit_5:
+      name: Export Limit 5
+      default: 500
+    limit_min:
+      name: Minimum Export Limit
+      default: 100
+    th_1:
+      name: Voltage Threshold 1
+      default: 245
+    th_2:
+      name: Voltage Threshold 2
+      default: 247
+    th_3:
+      name: Voltage Threshold 3
+      default: 249
+    th_4:
+      name: Voltage Threshold 4
+      default: 251
+    th_5:
+      name: Voltage Threshold 5
+      default: 253
+    hysteresis:
+      name: Hysteresis (V)
+      default: 1.0
+
+trigger:
+  - platform: state
+    entity_id: !input voltage_sensor
+
+condition:
+  - condition: numeric_state
+    entity_id: !input voltage_sensor
+    above: 238
+
+action:
+  - variables:
+      voltage: "{{ states(trigger.entity_id) | float }}"
+      current_limit: "{{ states(input.export_limit_input) | int }}"
+      limit_1: !input limit_1
+      limit_2: !input limit_2
+      limit_3: !input limit_3
+      limit_4: !input limit_4
+      limit_5: !input limit_5
+      limit_min: !input limit_min
+      th_1: !input th_1
+      th_2: !input th_2
+      th_3: !input th_3
+      th_4: !input th_4
+      th_5: !input th_5
+      hysteresis: !input hysteresis
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ voltage < (th_1 - hysteresis) and current_limit != limit_1 }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_1 }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ th_1 <= voltage < (th_2 - hysteresis) and current_limit != limit_2 }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_2 }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ th_2 <= voltage < (th_3 - hysteresis) and current_limit != limit_3 }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_3 }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ th_3 <= voltage < (th_4 - hysteresis) and current_limit != limit_4 }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_4 }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ th_4 <= voltage < (th_5 - hysteresis) and current_limit != limit_5 }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_5 }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ voltage >= th_5 and current_limit != limit_min }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input export_limit_input
+              value: "{{ limit_min }}"
+          - service: notify.notify
+            data:
+              target: !input notify_target
+              title: ⚠️ High Grid Voltage
+              message: >
+                Voltage reached {{ voltage }}V. Solar export limited to {{ limit_min }}W
+
+  - delay:
+      seconds: 5
+
+mode: restart
