@@ -3,7 +3,7 @@ blueprint:
   description: >
     Dynamically adjust the solar export limit based on real-time grid voltage using configurable thresholds
     and hysteresis to prevent frequent toggling due to overvoltage. Optionally notifies the user if voltage exceeds the upper limit.
-    
+
     Requires a voltage sensor, a numeric input to represent the export limit, and a mobile app device for notifications.
   domain: automation
   source_url: https://github.com/adelinchristian/homeassistant/blob/main/blueprints/adjust_pv_system_export_limits.yaml
@@ -72,7 +72,9 @@ condition:
 action:
   - variables:
       voltage: "{{ states(trigger.entity_id) | float }}"
-      current_limit: "{{ states(input.export_limit_input) | int }}"
+      export_limit_input: !input export_limit_input
+      notify_target: !input notify_target
+      current_limit: "{{ states(export_limit_input) | int }}"
       limit_1: !input limit_1
       limit_2: !input limit_2
       limit_3: !input limit_3
@@ -93,7 +95,7 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_1 }}"
 
       - conditions:
@@ -102,7 +104,7 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_2 }}"
 
       - conditions:
@@ -111,7 +113,7 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_3 }}"
 
       - conditions:
@@ -120,7 +122,7 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_4 }}"
 
       - conditions:
@@ -129,7 +131,7 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_5 }}"
 
       - conditions:
@@ -138,11 +140,10 @@ action:
         sequence:
           - service: input_number.set_value
             data:
-              entity_id: !input export_limit_input
+              entity_id: "{{ export_limit_input }}"
               value: "{{ limit_min }}"
-          - service: notify.notify
+          - service: notify.mobile_app_{{ notify_target }}
             data:
-              target: !input notify_target
               title: ⚠️ High Grid Voltage
               message: >
                 Voltage reached {{ voltage }}V. Solar export limited to {{ limit_min }}W
