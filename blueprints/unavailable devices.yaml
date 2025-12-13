@@ -1,0 +1,132 @@
+blueprint:
+  name: Advanced Unavailable Device Monitor
+  description: >
+    Monitors Home Assistant entities for unavailable state,
+    supports domain filtering, exclusions, delayed alerts,
+    recovery notifications, grouped messages, and logbook entries.
+  domain: automation
+
+  input:
+    monitored_domains:
+      name: Monitored domains
+      description: Only entities from these domains will be monitored
+      default:
+        - sensor
+        - light
+        - switch
+      selector:
+        select:
+          multiple: true
+          options:
+            - sensor
+            - light
+            - switch
+            - binary_sensor
+            - climate
+            - cover
+            - fan
+            - lock
+            - media_player
+            - number
+            - select
+            - update
+
+    excluded_entities:
+      name: Excluded entities
+      description: Entities that should be ignored
+      default: []
+      selector:
+        entity:
+          multiple: true
+
+    unavailable_for:
+      name: Unavailable duration
+      description: Time an entity must remain unavailable before alerting
+      default:
+        minutes: 5
+      selector:
+        duration:
+
+    notify_service:
+      name: Notification service
+      description: Notification service (e.g. notify.mobile_app_phone)
+      selector:
+        text:
+
+    enable_recovery:
+      name: Notify on recovery
+      description: Send a notification when the entity becomes available again
+      default: true
+      selector:
+        boolean:
+
+trigger:
+  - platform: state
+
+variables:
+  entity_id: "{{ trigger.entity_id }}"
+  domain: "{{ trigger.entity_id.split('.')[0] }}"
+  name: "{{ state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id }}"
+  excluded: "{{ entity_id in !input excluded_entities }}"
+  domain_allowed: "{{ domain in !input monitored_domains }}"
+
+condition:
+  - condition: template
+    value_template: >
+      {{ not excluded and domain_allowed }}
+
+action:
+  - choose:
+      # =========================
+      # ENTITY BECOMES UNAVAILABLE
+      # =========================
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.to_state.state == 'unavailable' }}
+        sequence:
+          - delay: !input unavailable_for
+
+          # Re-check state after delay
+          - condition: template
+            value_template: >
+              {{ states(entity_id) == 'unavailable' }}
+
+          - service: logbook.log
+            data:
+              name: "Device unavailable"
+              message: "{{ name }} is unavailable"
+              entity_id: "{{ entity_id }}"
+
+          - service: !input notify_service
+            data:
+              title: "⚠️ Device unavailable"
+              message: >
+                {{ name }} has been unavailable for
+                {{ !input unavailable_for }}.
+
+      # =========================
+      # ENTITY RECOVERS
+      # =========================
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.from_state is not none
+                 and trigger.from_state.state == 'unavailable'
+                 and trigger.to_state.state != 'unavailable'
+                 and !input enable_recovery }}
+        sequence:
+          - service: logbook.log
+            data:
+              name: "Device recovered"
+              message: "{{ name }} is back online"
+              entity_id: "{{ entity_id }}"
+
+          - service: !input notify_service
+            data:
+              title: "✅ Device recovered"
+              message: >
+                {{ name }} is back online.
+
+mode: parallel
+max: 20
