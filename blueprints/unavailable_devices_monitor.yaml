@@ -1,0 +1,58 @@
+variables:
+  entity_id: "{{ trigger.entity_id }}"
+  domain: "{{ trigger.entity_id.split('.')[0] }}"
+  name: "{{ state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id }}"
+  # Move all !input usages out of Jinja templates — assign them to variables first
+  excluded_entities: !input excluded_entities
+  monitored_domains: !input monitored_domains
+  unavailable_for: !input unavailable_for
+  enable_recovery: !input enable_recovery
+  # Now evaluate templates against those variables
+  excluded: "{{ entity_id in excluded_entities }}"
+  domain_allowed: "{{ domain in monitored_domains }}"
+mode: parallel
+max: 20
+trigger:
+  - platform: state
+conditions:
+  - condition: template
+    value_template: "{{ not excluded and domain_allowed }}"
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'unavailable' }}"
+        sequence:
+          - delay:
+              minutes: 5
+          - condition: template
+            value_template: "{{ states(entity_id) == 'unavailable' }}"
+          - service: logbook.log
+            data:
+              name: "Device unavailable"
+              message: "{{ name }} is unavailable"
+              entity_id: "{{ entity_id }}"
+          - service: notify.mobile_app_adelins_iphone
+            data:
+              title: "⚠️ Device unavailable"
+              message: >-
+                {{ name }} has been unavailable for {{ unavailable_for }}.
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.from_state is not none
+                 and trigger.from_state.state == 'unavailable'
+                 and trigger.to_state.state != 'unavailable'
+                 and enable_recovery }}
+        sequence:
+          - service: logbook.log
+            data:
+              name: "Device recovered"
+              message: "{{ name }} is back online"
+              entity_id: "{{ entity_id }}"
+          - service: notify.mobile_app_adelins_iphone
+            data:
+              title: "✅ Device recovered"
+              message: "{{ name }} is back online."
+alias: Unavailable Devices Monitor
+description: ""
