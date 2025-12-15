@@ -1,203 +1,102 @@
-```yaml
 blueprint:
-  name: Advanced Unavailable Device Monitor (Ultimate Production)
-  description: >
-    Enterprise-grade unavailable device monitoring.
-    Features:
-      • domain & entity filtering
-      • delayed alerts
-      • event-based aggregation (stateless)
-      • per-domain grouped notifications
-      • severity levels (device count based)
-      • critical-domain override (always push)
-      • notification mode: Push / Persistent / Both
-      • auto-dismiss persistent notifications
-      • clickable entity links
-      • timestamps per entity
-      • rate limiting
-      • logbook entries
-  domain: automation
+monitored_domains: !input monitored_domains
+critical_domains: !input critical_domains
+excluded_entities: !input excluded_entities
+unavailable_for: !input unavailable_for
+aggregation_window: !input aggregation_window
+rate_limit: !input rate_limit
+notification_mode: !input notification_mode
 
-  input:
-    monitored_domains:
-      name: Monitored domains
-      default: [sensor, light, switch]
-      selector:
-        select:
-          multiple: true
-          options:
-            - sensor
-            - light
-            - switch
-            - binary_sensor
-            - climate
-            - cover
-            - fan
-            - lock
-            - media_player
-            - number
-            - select
-            - update
 
-    critical_domains:
-      name: Critical domains
-      description: Always send push notifications for these domains
-      default: [lock]
-      selector:
-        select:
-          multiple: true
-          options:
-            - lock
-            - climate
-            - cover
-            - alarm_control_panel
+domain: "{{ trigger.entity_id.split('.')[0] }}"
 
-    excluded_entities:
-      name: Excluded entities
-      default: []
-      selector:
-        entity:
-          multiple: true
-
-    unavailable_for:
-      name: Unavailable duration
-      default:
-        minutes: 5
-      selector:
-        duration:
-
-    aggregation_window:
-      name: Aggregation window
-      default:
-        minutes: 10
-      selector:
-        duration:
-
-    rate_limit:
-      name: Rate limit interval
-      default:
-        hours: 1
-      selector:
-        duration:
-
-    notification_mode:
-      name: Notification mode
-      default: both
-      selector:
-        select:
-          options: [push, persistent, both]
-
-    notify_service:
-      name: Push notification service
-      selector:
-        service:
-
-trigger:
-  - platform: state
-    to: unavailable
-
-variables:
-  monitored_domains: !input monitored_domains
-  critical_domains: !input critical_domains
-  excluded_entities: !input excluded_entities
-  unavailable_for: !input unavailable_for
-  aggregation_window: !input aggregation_window
-  rate_limit: !input rate_limit
-  notification_mode: !input notification_mode
-
-  domain: "{{ trigger.entity_id.split('.')[0] }}"
 
 condition:
-  - condition: template
-    value_template: "{{ domain in monitored_domains }}"
+- condition: template
+value_template: "{{ domain in monitored_domains }}"
+
 
 action:
-  - delay: !input unavailable_for
+- delay: !input unavailable_for
 
-  - variables:
-      unavailable_entities: >
-        {{ states
-           | selectattr('domain', 'eq', domain)
-           | selectattr('state', 'eq', 'unavailable')
-           | rejectattr('entity_id', 'in', excluded_entities)
-           | map(attribute='entity_id')
-           | list }}
 
-  - condition: template
-    value_template: "{{ unavailable_entities | length > 0 }}"
+- variables:
+unavailable_entities: >
+{{ states
+| selectattr('domain', 'eq', domain)
+| selectattr('state', 'eq', 'unavailable')
+| rejectattr('entity_id', 'in', excluded_entities)
+| map(attribute='entity_id')
+| list }}
 
-  - wait_for_trigger:
-      - platform: event
-        event_type: state_changed
-    timeout: !input aggregation_window
-    continue_on_timeout: true
 
-  - variables:
-      count: "{{ unavailable_entities | length }}"
+- condition: template
+value_template: "{{ unavailable_entities | length > 0 }}"
 
-      severity: >
-        {% if domain in critical_domains %}emergency
-        {% elif count >= 5 %}critical
-        {% elif count >= 2 %}warning
-        {% else %}info
-        {% endif %}
 
-      severity_icon: >
-        {% if severity == 'emergency' %}🔴
-        {% elif severity == 'critical' %}🟠
-        {% elif severity == 'warning' %}🟡
-        {% else %}🟢
-        {% endif %}
+- wait_for_trigger:
+- platform: event
+event_type: state_changed
+timeout: !input aggregation_window
+continue_on_timeout: true
 
-      entity_lines: >
-        {{ unavailable_entities
-           | map('regex_replace', '^(.*)$', '- [\\1](/config/entities/\\1) — {{ now().strftime("%H:%M") }}')
-           | join('\\n') }}
 
-  - choose:
+- variables:
+count: "{{ unavailable_entities | length }}"
 
-      # Persistent notification
-      - conditions:
-          - condition: template
-            value_template: "{{ notification_mode in ['persistent','both'] }}"
-        sequence:
-          - service: persistent_notification.create
-            data:
-              notification_id: "unavailable_{{ domain }}"
-              title: "{{ severity_icon }} {{ domain | title }} unavailable ({{ severity | upper }})"
-              message: >
-                {{ count }} entities unavailable:\n\n{{ entity_lines }}
 
-      # Push notification
-      - conditions:
-          - condition: template
-            value_template: >
-              {{ notification_mode in ['push','both']
-                 and (domain in critical_domains
-                      or severity in ['critical','emergency']
-                      or this.last_triggered is none
-                      or (now() - this.last_triggered) > rate_limit) }}
-        sequence:
-          - service: !input notify_service
-            data:
-              title: "{{ severity_icon }} {{ domain | title }} unavailable"
-              message: "{{ count }} entities unavailable ({{ severity }})"
+severity: >
+{% if domain in critical_domains %}emergency
+{% elif count >= 5 %}critical
+{% elif count >= 2 %}warning
+{% else %}info
+{% endif %}
+
+
+severity_icon: >
+{% if severity == 'emergency' %}🔴
+{% elif severity == 'critical' %}🟠
+{% elif severity == 'warning' %}🟡
+{% else %}🟢
+{% endif %}
+
+
+entity_lines: >
+{{ unavailable_entities
+| map('regex_replace', '^(.*)$', '- [\\1](/config/entities/\\1) — {{ now().strftime("%H:%M") }}')
+| join('\\n') }}
+
+
+- choose:
+
+
+# Persistent notification
+- conditions:
+- condition: template
+value_template: "{{ notification_mode in ['persistent','both'] }}"
+sequence:
+- service: persistent_notification.create
+data:
+notification_id: "unavailable_{{ domain }}"
+title: "{{ severity_icon }} {{ domain | title }} unavailable ({{ severity | upper }})"
+message: >
+{{ count }} entities unavailable:\n\n{{ entity_lines }}
+
+
+# Push notification
+- conditions:
+- condition: template
+value_template: >
+{{ notification_mode in ['push','both']
+and (domain in critical_domains
+or severity in ['critical','emergency']
+or this.last_triggered is none
+or (now() - this.last_triggered) > rate_limit) }}
+sequence:
+- service: !input notify_service
+data:
+title: "{{ severity_icon }} {{ domain | title }} unavailable"
+message: "{{ count }} entities unavailable ({{ severity }})"
+
 
 mode: restart
-```
-
----
-
-## 📊 DASHBOARD STATUS CARD (AUTO-GENERATED)
-
-Add this **Markdown card** to your dashboard:
-
-```yaml
-type: markdown
-content: >
-  ## 🔌 Device Availability Status\n
-  {% for d in ['sensor','light','switch','climate','lock'] %}
-  {% set items = states | selectattr('domain','eq',d) | selectattr('state','eq','unavailable') | list %}
-  **{{ d | title }}**: {{ items | length }} unavailable
-  {% endfor %}
-```
