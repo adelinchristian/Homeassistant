@@ -96,25 +96,26 @@ trigger:
   - platform: state
     to: unavailable
 
-variables:
-  monitored_domains: !input monitored_domains
-  critical_domains: !input critical_domains
-  excluded_entities: !input excluded_entities
-  unavailable_for: !input unavailable_for
-  aggregation_window: !input aggregation_window
-  rate_limit: !input rate_limit
-  notification_mode: !input notification_mode
-
-  # Safe runtime evaluation
-  entity_id: "{{ trigger.entity_id if trigger is defined else '' }}"
-  domain: "{{ trigger.entity_id.split('.')[0] if trigger is defined else '' }}"
-  name: "{{ state_attr(trigger.entity_id,'friendly_name') if trigger is defined else '' or '' }}"
-
-condition:
-  - condition: template
-    value_template: "{{ entity_id != '' and domain in monitored_domains and entity_id not in excluded_entities }}"
+condition: []
 
 action:
+  # Runtime variables
+  - variables:
+      entity_id: "{{ trigger.entity_id }}"
+      domain: "{{ trigger.entity_id.split('.')[0] }}"
+      name: "{{ state_attr(trigger.entity_id,'friendly_name') or trigger.entity_id }}"
+      monitored_domains: !input monitored_domains
+      critical_domains: !input critical_domains
+      excluded_entities: !input excluded_entities
+      unavailable_for: !input unavailable_for
+      aggregation_window: !input aggregation_window
+      rate_limit: !input rate_limit
+      notification_mode: !input notification_mode
+
+  # Skip if entity is excluded or domain not monitored
+  - condition: template
+    value_template: "{{ domain in monitored_domains and entity_id not in excluded_entities }}"
+
   # Delay to confirm unavailable
   - delay: !input unavailable_for
 
