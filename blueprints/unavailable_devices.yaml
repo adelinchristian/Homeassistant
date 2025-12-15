@@ -32,7 +32,6 @@ blueprint:
             - update
             - siren
             - camera
-    
 
     critical_domains:
       name: Critical domains
@@ -106,13 +105,14 @@ variables:
   rate_limit: !input rate_limit
   notification_mode: !input notification_mode
 
-  entity_id: "{{ trigger.entity_id }}"
-  domain: "{{ trigger.entity_id.split('.')[0] }}"
-  name: "{{ state_attr(trigger.entity_id,'friendly_name') or trigger.entity_id }}"
+  # Safe runtime evaluation
+  entity_id: "{{ trigger.entity_id if trigger is defined else '' }}"
+  domain: "{{ trigger.entity_id.split('.')[0] if trigger is defined else '' }}"
+  name: "{{ state_attr(trigger.entity_id,'friendly_name') if trigger is defined else '' or '' }}"
 
 condition:
   - condition: template
-    value_template: "{{ domain in monitored_domains and entity_id not in excluded_entities }}"
+    value_template: "{{ entity_id != '' and domain in monitored_domains and entity_id not in excluded_entities }}"
 
 action:
   # Delay to confirm unavailable
