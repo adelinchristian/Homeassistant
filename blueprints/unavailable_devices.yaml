@@ -110,6 +110,9 @@ action:
       aggregation_window: !input aggregation_window
       rate_limit: !input rate_limit
       notification_mode: !input notification_mode
+      # Safe fallback for rate limit
+      last_triggered_safe: >
+        {{ this.last_triggered if this.last_triggered is not none else now() - rate_limit - 1 }}
 
   # Skip if entity is excluded or domain not monitored
   - condition: template
@@ -186,15 +189,13 @@ action:
                 {{ line }}
                 {% endfor %}
 
-      # Push notification
+      # Push notification with safe rate-limit
       - conditions:
           - condition: template
             value_template: >
-              {{ notification_mode in ['push','both']
-                 and (domain in critical_domains
-                      or severity in ['critical','emergency']
-                      or this.last_triggered is none
-                      or (now() - this.last_triggered) > rate_limit) }}
+              {{ notification_mode in ['push','both'] and
+                 (domain in critical_domains or severity in ['critical','emergency'] or
+                 (now() - last_triggered_safe) > rate_limit) }}
         sequence:
           - service: "{{ notify_service }}"
             data:
