@@ -11,6 +11,7 @@ blueprint:
     monitored_entities:
       name: Entities to monitor
       description: Select the entities you want to monitor for unavailable state.
+      required: true
       selector:
         entity:
           multiple: true
@@ -69,9 +70,9 @@ blueprint:
 
     notify_service:
       name: Push notification service
-      description: Push notification service (e.g., notify.mobile_app_phone)
+      description: Push notification service
       selector:
-        text:
+        service: notify
 
 trigger:
   - platform: state
@@ -81,7 +82,6 @@ trigger:
 condition: []
 
 action:
-  # Runtime variables
   - variables:
       entity_id: "{{ trigger.entity_id }}"
       domain: "{{ trigger.entity_id.split('.')[0] }}"
@@ -113,7 +113,7 @@ action:
     timeout: !input aggregation_window
     continue_on_timeout: true
 
-  # Build list of unavailable entities in the same domain
+  # Build domain-level list of unavailable entities
   - variables:
       unavailable_entities: >
         {{ states
@@ -145,10 +145,10 @@ action:
            | list }}
 
   # Logbook entry
-  - service: logbook.log
-    data:
-      name: "Devices unavailable"
-      message: "{{ name }} is unavailable"
+  # - service: logbook.log
+  #   data:
+  #     name: "Devices unavailable"
+  #     message: "{{ name }} is unavailable"
 
   # Persistent notification
   - choose:
@@ -174,7 +174,7 @@ action:
                  (domain in critical_domains or severity in ['critical','emergency'] or
                  (now() - last_triggered_safe) > rate_limit) }}
         sequence:
-          - service: "{{ notify_service }}"
+          - service: !input notify_service
             data:
               title: "{{ severity_icon }} {{ domain | title }} unavailable"
               message: "{{ count }} entities unavailable ({{ severity }})"
