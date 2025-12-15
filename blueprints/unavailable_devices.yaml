@@ -1,5 +1,5 @@
 blueprint:
-  name: Advanced Unavailable Device Monitor (Production)
+  name: Advanced Unavailable Device Monitor (Production, GitHub Import)
   description: >
     Monitors selected domains for unavailable devices.
     Features: aggregation, per-domain grouping, severity levels,
@@ -82,9 +82,10 @@ blueprint:
 
     notify_service:
       name: Push notification service
-      description: Service to send push notifications (e.g., notify.mobile_app)
+      description: Push notification service (e.g., notify.mobile_app_phone)
+      default: notify.mobile_app_yourdevice
       selector:
-        service:
+        text:
 
 trigger:
   - platform: state
@@ -190,7 +191,7 @@ action:
                       or this.last_triggered is none
                       or (now() - this.last_triggered) > rate_limit) }}
         sequence:
-          - service: !input notify_service
+          - service: "{{ notify_service }}"
             data:
               title: "{{ severity_icon }} {{ domain | title }} unavailable"
               message: "{{ count }} entities unavailable ({{ severity }})"
