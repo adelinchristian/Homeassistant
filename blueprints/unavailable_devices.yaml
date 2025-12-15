@@ -145,10 +145,10 @@ action:
            | list }}
 
   # Logbook entry
-  # - service: logbook.log
-  #   data:
-  #     name: "Devices unavailable"
-  #     message: "{{ name }} is unavailable"
+  - service: logbook.log
+    data:
+      name: "Devices unavailable"
+      message: "{{ name }} is unavailable"
 
   # Persistent notification
   - choose:
