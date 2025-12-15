@@ -30,6 +30,9 @@ blueprint:
             - number
             - select
             - update
+            - siren
+            - camera
+    
 
     critical_domains:
       name: Critical domains
@@ -44,6 +47,9 @@ blueprint:
             - climate
             - cover
             - alarm_control_panel
+            - binary_sensor
+            - camera
+            - siren
 
     excluded_entities:
       name: Excluded entities
@@ -158,12 +164,11 @@ action:
            | map('regex_replace','^(.*)$','[\\1](/config/entities/\\1) — ' ~ now().strftime('%H:%M')) 
            | list }}
 
-  # Logbook entry
+  # Logbook entry (entity_id removed)
   - service: logbook.log
     data:
       name: "Devices unavailable"
       message: "{{ name }} is unavailable"
-      entity_id: "{{ entity_id }}"
 
   # Persistent notification
   - choose:
