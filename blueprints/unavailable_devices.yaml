@@ -88,7 +88,6 @@ blueprint:
     notify_service:
       name: Push notification service
       description: Push notification service (e.g., notify.mobile_app_phone)
-      default: notify.mobile_app_yourdevice
       selector:
         text:
 
