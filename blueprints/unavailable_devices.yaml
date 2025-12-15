@@ -1,37 +1,19 @@
 blueprint:
   name: Advanced Unavailable Device Monitor (Production, GitHub Import)
   description: >
-    Monitors selected domains for unavailable devices.
+    Monitors selected entities for unavailable devices.
     Features: aggregation, per-domain grouping, severity levels,
     critical domain override, push/persistent notifications,
     auto-dismiss persistent notifications, clickable entity links, timestamps.
   domain: automation
 
   input:
-    monitored_domains:
-      name: Monitored domains
-      default:
-        - sensor
-        - light
-        - switch
+    monitored_entities:
+      name: Entities to monitor
+      description: Select the entities you want to monitor for unavailable state.
       selector:
-        select:
+        entity:
           multiple: true
-          options:
-            - sensor
-            - light
-            - switch
-            - binary_sensor
-            - climate
-            - cover
-            - fan
-            - lock
-            - media_player
-            - number
-            - select
-            - update
-            - siren
-            - camera
 
     critical_domains:
       name: Critical domains
@@ -93,6 +75,7 @@ blueprint:
 
 trigger:
   - platform: state
+    entity_id: !input monitored_entities
     to: unavailable
 
 condition: []
@@ -103,20 +86,18 @@ action:
       entity_id: "{{ trigger.entity_id }}"
       domain: "{{ trigger.entity_id.split('.')[0] }}"
       name: "{{ state_attr(trigger.entity_id,'friendly_name') or trigger.entity_id }}"
-      monitored_domains: !input monitored_domains
       critical_domains: !input critical_domains
       excluded_entities: !input excluded_entities
       unavailable_for: !input unavailable_for
       aggregation_window: !input aggregation_window
       rate_limit: !input rate_limit
       notification_mode: !input notification_mode
-      # Safe fallback for rate limit
       last_triggered_safe: >
-        {{ this.last_triggered if this.last_triggered is not none else now() - rate_limit - 1 }}
+        {{ this.last_triggered if this.last_triggered is not none else now() - rate_limit - timedelta(seconds=1) }}
 
-  # Skip if entity is excluded or domain not monitored
+  # Skip if entity is excluded
   - condition: template
-    value_template: "{{ domain in monitored_domains and entity_id not in excluded_entities }}"
+    value_template: "{{ entity_id not in excluded_entities }}"
 
   # Delay to confirm unavailable
   - delay: !input unavailable_for
@@ -125,14 +106,14 @@ action:
   - condition: template
     value_template: "{{ states(entity_id) == 'unavailable' }}"
 
-  # Wait for aggregation window to collect multiple events
+  # Wait for aggregation window
   - wait_for_trigger:
       - platform: event
         event_type: state_changed
     timeout: !input aggregation_window
     continue_on_timeout: true
 
-  # Build domain-level list of unavailable entities
+  # Build list of unavailable entities in the same domain
   - variables:
       unavailable_entities: >
         {{ states
@@ -141,9 +122,7 @@ action:
            | rejectattr('entity_id','in',excluded_entities)
            | map(attribute='entity_id')
            | list }}
-
       count: "{{ unavailable_entities | length }}"
-
       severity: >
         {% if domain in critical_domains %}
           emergency
@@ -154,20 +133,18 @@ action:
         {% else %}
           info
         {% endif %}
-
       severity_icon: >
         {% if severity == 'emergency' %}🔴
         {% elif severity == 'critical' %}🟠
         {% elif severity == 'warning' %}🟡
         {% else %}🟢
         {% endif %}
-
       entity_lines: >
         {{ unavailable_entities
            | map('regex_replace','^(.*)$','[\\1](/config/entities/\\1) — ' ~ now().strftime('%H:%M')) 
            | list }}
 
-  # Logbook entry (entity_id removed)
+  # Logbook entry
   - service: logbook.log
     data:
       name: "Devices unavailable"
