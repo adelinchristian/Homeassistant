@@ -1,0 +1,209 @@
+
+blueprint:
+  name: Monitor entities (unavailable→available & OFF) → actions + notify
+  description: >
+    Monitors entities for availability recovery (unavailable/unknown → available) and
+    OFF state (stabilized for N seconds). Sends optional push notifications to a Mobile
+    App device and runs user-defined actions. Supports multi-entity monitoring.
+  domain: automation
+
+  input:
+    monitored_entities:
+      name: Monitored entities
+      description: Select entities to monitor (any domain).
+      selector:
+        entity:
+          multiple: true
+
+    stabilize_for:
+      name: OFF stabilization (seconds)
+      description: Minimum duration the entity must remain OFF before actions fire.
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: s
+          mode: slider
+
+    notify_device:
+      name: Mobile App device for notifications (optional)
+      description: Choose your phone (Mobile App integration) to receive push notifications.
+      default: ""
+      selector:
+        device:
+          integration: mobile_app
+          multiple: false
+
+    # Notification toggles
+    notify_on_recovery:
+      name: Notify on recovery (unavailable→available)
+      default: true
+      selector:
+        boolean:
+
+    notify_on_off:
+      name: Notify when OFF
+      default: true
+      selector:
+        boolean:
+
+    # Optional custom titles/messages (templating supported)
+    recovery_title:
+      name: Recovery notification title
+      default: "Entity recovered"
+      selector:
+        text:
+
+    recovery_message:
+      name: Recovery notification message
+      default: "✅ {{ trigger.entity_id }} is back (state: {{ trig_to }})"
+      selector:
+        text:
+
+    off_title:
+      name: OFF notification title
+      default: "Entity is OFF"
+      selector:
+        text:
+
+    off_message:
+      name: OFF notification message
+      default: "⚠️ {{ trigger.entity_id }} has been OFF for {{ stabilize_for }}s."
+      selector:
+        text:
+
+    # Actions to run for each case
+    recovery_actions:
+      name: Actions to run on recovery
+      description: >
+        Define actions to run when entity recovers from unavailable/unknown.
+        You can reference {{ trigger.entity_id }} as the entity that changed.
+      default: []
+      selector:
+        action:
+
+    off_actions:
+      name: Actions to run when OFF
+      description: >
+        Define actions to run when entity is OFF for the configured duration.
+        You can reference {{ trigger.entity_id }} as the entity that changed.
+      default: []
+      selector:
+        action:
+
+    run_mode:
+      name: Automation mode
+      default: restart
+      selector:
+        select:
+          options:
+            - single
+            - restart
+            - queued
+            - parallel
+
+mode: !input run_mode
+max_exceeded: silent
+
+variables:
+  trig_entity: "{{ trigger.entity_id }}"
+  trig_from: "{{ trigger.from_state.state if trigger.from_state is not none else '' }}"
+  trig_to: "{{ trigger.to_state.state if trigger.to_state is not none else '' }}"
+  stabilize_for: !input stabilize_for
+
+  notify_device_id: !input notify_device
+  notify_recovery: !input notify_on_recovery
+  notify_off: !input notify_on_off
+
+  recovery_title: !input recovery_title
+  recovery_message: !input recovery_message
+  off_title: !input off_title
+  off_message: !input off_message
+
+trigger:
+  # Availability recovery (from unavailable → anything normal)
+  - platform: state
+    entity_id: !input monitored_entities
+    from: unavailable
+
+  # Availability recovery (from unknown → anything normal)
+  - platform: state
+    entity_id: !input monitored_entities
+    from: unknown
+
+  # OFF state stabilized
+  - platform: state
+    entity_id: !input monitored_entities
+    to: "off"
+    for:
+      seconds: !input stabilize_for
+
+condition: []
+
+action:
+  - choose:
+      # Case 1: Recovery from unavailable/unknown → normal state
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trig_from in ['unavailable', 'unknown'] and trig_to not in ['unavailable', 'unknown'] }}
+        sequence:
+          # Optional notification
+          - if:
+              - condition: template
+                value_template: "{{ notify_recovery }}"
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_device_id | string | length > 0 }}"
+                then:
+                  # Mobile App push notification
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    title: "{{ recovery_title }}"
+                    message: "{{ recovery_message }}"
+                else:
+                  # Fallback to local persistent notification
+                  - service: persistent_notification.create
+                    data:
+                      title: "{{ recovery_title }}"
+                      message: "{{ recovery_message }}"
+
+          # User-defined action(s) for recovery
+          - sequence: !input recovery_actions
+
+      # Case 2: Entity is OFF for the configured duration
+      - conditions:
+          - condition: template
+            value_template: "{{ trig_to == 'off' }}"
+        sequence:
+          # Optional notification
+          - if:
+              - condition: template
+                value_template: "{{ notify_off }}"
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ notify_device_id | string | length > 0 }}"
+                then:
+                  # Mobile App push notification
+                  - device_id: !input notify_device
+                    domain: mobile_app
+                    type: notify
+                    title: "{{ off_title }}"
+                    message: "{{ off_message }}"
+                else:
+                  # Fallback to local persistent notification
+                  - service: persistent_notification.create
+                    data:
+                      title: "{{ off_title }}"
+                      message: "{{ off_message }}"
+
+          # User-defined action(s) when OFF
+          - sequence: !input off_actions
+
+  # Default: do nothing if none of the above matched (e.g., other state transitions)
+  - default: []
+``
