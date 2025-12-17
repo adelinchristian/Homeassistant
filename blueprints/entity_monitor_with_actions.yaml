@@ -203,5 +203,3 @@ action:
           # User-defined action(s) when OFF
           - sequence: !input off_actions
 
-  # Default: do nothing if none of the above matched (e.g., other state transitions)
-  - default: []
