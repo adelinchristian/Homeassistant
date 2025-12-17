@@ -1,4 +1,3 @@
-
 blueprint:
   name: Monitor entities (unavailable→available & OFF) → actions + notify
   description: >
@@ -206,4 +205,3 @@ action:
 
   # Default: do nothing if none of the above matched (e.g., other state transitions)
   - default: []
-``
